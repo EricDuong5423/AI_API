@@ -2,32 +2,25 @@ import json
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 from math import ceil
-import requests
 import re
 import os
 from dotenv import load_dotenv
+from pymongo import MongoClient
+from bson import json_util
 
 load_dotenv()
 
 # Cấu hình Gemini API
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+database = client["CO3109"]
 
 app = Flask(__name__)
 
 # Danh sách động cơ từ database (Bạn có thể lấy từ MongoDB)
 
-
-def fetch_database_data(url):
-    response = requests.get(url)
-    return response.json()
-
-dong_co_list = []
-dong_co_list = fetch_database_data("http://localhost:5165/api/dong_co_4a")
-dong_co_list += fetch_database_data("http://localhost:5165/api/dong_co_dk")
-dong_co_list += fetch_database_data("http://localhost:5165/api/dong_co_k")
-
-def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim):
-    filter_dong_co = list(filter(lambda x: x['cong_suat'] >= cong_suat_can_tim, dong_co_list))
+def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list):
     """
     Gửi yêu cầu đến Gemini API để chọn động cơ phù hợp nhất.
     """
@@ -35,7 +28,7 @@ def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim):
             Bạn là chuyên gia trong việc lựa chọn động cơ điện. Hãy tìm động cơ phù hợp nhất từ danh sách dưới đây.
 
             ### **Danh sách động cơ:**
-            {json.dumps(filter_dong_co, indent=2, ensure_ascii=False)}
+            {json.dumps(dong_co_list, indent=2, ensure_ascii=False)}
 
             ### **Tiêu chí lựa chọn:**
             1. **Công suất (`cong_suat` kW)** phải lớn hơn hoặc bằng giá trị yêu cầu.
@@ -73,16 +66,18 @@ def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim):
 
 @app.route("/api-ai/find-engine", methods=["POST"])
 def findBestEngine():
+    
+    collection = database["dong_co_dien"]
     try:
         data = request.json
-        cong_suat_can_tim = ceil(float(data.get("cong_suat_can_tim", 0)))
-        van_toc_quay_can_tim = ceil(float(data.get("van_toc_quay_can_tim", 0)))
-
+        cong_suat_can_tim = int(ceil(float(data.get("cong_suat_can_tim", 0))))
+        van_toc_quay_can_tim = int(ceil(float(data.get("van_toc_quay_can_tim", 0))))
         if cong_suat_can_tim == 0 or van_toc_quay_can_tim == 0:
             return jsonify({"error": "Thiếu thông số đầu vào"}), 400
-        best_motor_id = get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim)
-        print(best_motor_id)
-        return jsonify({"best_motor_id": best_motor_id})
+        dong_co_list = list(collection.find({"cong_suat": {"$gte": cong_suat_can_tim}}))
+        dong_co_list = json.loads(json_util.dumps(dong_co_list))
+        best_motor_id = get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list)
+        return jsonify(best_motor_id)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
