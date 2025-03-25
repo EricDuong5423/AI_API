@@ -53,7 +53,9 @@ def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list):
                 "reason": "Lý do chọn động cơ"
             }}
     """
-    response = client_AI.models.generate_content(prompt)
+    response = client_AI.models.generate_content(
+        model="gemini-2.0-pro-exp-02-05",
+        contents=[prompt])
 
     response_text = response.text.strip()
     response_text = re.sub(r"```json\n(.*?)\n```", r"\1", response_text, flags=re.DOTALL)
