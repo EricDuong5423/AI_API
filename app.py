@@ -1,5 +1,7 @@
 import json
 import google.generativeai as genai
+from google import genai
+from google.genai import types
 from flask import Flask, request, jsonify
 from math import ceil
 import re
@@ -7,14 +9,15 @@ import os
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson import json_util
+import requests
 
 load_dotenv()
 
 # Cấu hình Gemini API
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 MONGO_URI = os.getenv("MONGO_URI")
 client = MongoClient(MONGO_URI)
 database = client["CO3109"]
+client_AI = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = Flask(__name__)
 
@@ -50,9 +53,7 @@ def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list):
                 "reason": "Lý do chọn động cơ"
             }}
     """
-
-    model = genai.GenerativeModel("gemini-2.0-pro-exp-02-05")
-    response = model.generate_content(prompt)
+    response = client_AI.models.generate_content(prompt)
 
     response_text = response.text.strip()
     response_text = re.sub(r"```json\n(.*?)\n```", r"\1", response_text, flags=re.DOTALL)
@@ -63,6 +64,43 @@ def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list):
         return result
     except json.JSONDecodeError:
         return {"best_motor_id": None, "reason": "Lỗi khi xử lý kết quả từ AI"}
+
+def get_material(sH, z, v):
+    image_url = os.getenv("IMAGE_URL")
+    image = requests.get(image_url)
+    response = client_AI.models.generate_content(
+    model="gemini-2.0-pro-exp-02-05",
+    contents=[f"""Tôi có một bảng vật liệu trong ảnh. Dựa vào bảng này, hãy chọn một vật liệu thích hợp nhất và chỉ giải thích trong json dựa trên các điều kiện sau:
+                    1**Ứng suất tiếp xúc** ({sH}) phải **trong** khoảng ứng suất tiếp xúc trong bảng (đối với dưới 500 thì chấp nhận nhỏ hơn).  
+                    2**Số răng bánh răng** ({z}) và **vận tốc xích** ({v}) phải phù hợp với điều kiện trong cột cuối cùng ("Điều kiện làm việc của đĩa xích").  
+                    3Trả kết quả dưới dạng **JSON** với các trường sau:
+                    - `"vat_lieu"`: Tên vật liệu  
+                    - `"nhiet_luyen"`: Nhiệt luyện  
+                    - `"do_ran_be_mat"`: Độ rắn bề mặt
+                    - `"giai_thich"`: Giải thích lý do chọn
+
+                    Ví dụ:  
+                    ```json
+                    {{
+                        "vat_lieu": "Thép 45",
+                        "nhiet_luyen": "Tôi cải thiện",
+                        "do_ran_be_mat": "HB170...210",
+                        "giai_thich": "Vì này phù hợp nhất"
+                    }}""",
+              types.Part.from_bytes(data=image.content, mime_type="image/jpeg")])
+    response_text = response.text.strip()
+
+    try:
+        json_match = re.search(r"```json\n(.*?)\n```", response_text, re.DOTALL)
+        if json_match:
+            response_text = json_match.group(1)
+        result = json.loads(response_text)
+        return result
+
+    except json.JSONDecodeError:
+        return {"error": "Lỗi khi xử lý JSON từ AI!"}
+    except Exception as e:
+        return {"error": f"Lỗi không xác định: {str(e)}"}
 
 @app.route("/api-ai/find-engine", methods=["POST"])
 def findBestEngine():
@@ -82,6 +120,18 @@ def findBestEngine():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api-ai/find-material", methods=["POST"])
+def findMaterial():
+    try:
+        data = request.json
+        sH = float(data["sH"]) if "sH" in data else None
+        z = float(data["z"]) if "z" in data else None
+        v = float(data["v"]) if "v" in data else None
+        material = get_material(sH, z, v)
+        return jsonify(material)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render cấp PORT động
+    port = int(os.environ.get("PORT", 8080))  # Render cấp PORT động
     app.run(host="0.0.0.0", port=port)
