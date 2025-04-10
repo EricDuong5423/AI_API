@@ -1,5 +1,4 @@
 import json
-import google.generativeai as genai
 from google import genai
 from google.genai import types
 from flask import Flask, request, jsonify
@@ -54,7 +53,7 @@ def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list):
             }}
     """
     response = client_AI.models.generate_content(
-        model="gemini-2.0-pro-exp-02-05",
+        model="gemini-2.5-pro-exp-03-25",
         contents=[prompt])
 
     response_text = response.text.strip()
@@ -71,10 +70,10 @@ def get_material(sH, z, v):
     image_url = os.getenv("IMAGE_URL")
     image = requests.get(image_url)
     response = client_AI.models.generate_content(
-    model="gemini-2.0-pro-exp-02-05",
+    model="gemini-2.0-flash",
     contents=[f"""Tôi có một bảng vật liệu trong ảnh. Dựa vào bảng này, hãy chọn một vật liệu thích hợp nhất và chỉ giải thích trong json dựa trên các điều kiện sau:
-                    1**Ứng suất tiếp xúc** ({sH}) phải **trong** khoảng ứng suất tiếp xúc trong bảng (đối với dưới 500 thì chấp nhận nhỏ hơn).  
-                    2**Số răng bánh răng** ({z}) và **vận tốc xích** ({v}) phải phù hợp với điều kiện trong cột cuối cùng ("Điều kiện làm việc của đĩa xích").  
+                    1**Ứng suất tiếp xúc** ({sH}) phải **trong** khoảng ứng suất tiếp xúc trong bảng.  
+                    2**Số răng bánh răng** ({z}) và **vận tốc xích** ({v}).  
                     3Trả kết quả dưới dạng **JSON** với các trường sau:
                     - `"vat_lieu"`: Tên vật liệu  
                     - `"nhiet_luyen"`: Nhiệt luyện  
