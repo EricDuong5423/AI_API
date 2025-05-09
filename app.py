@@ -220,7 +220,7 @@ def extract_input():
                 "data": result
             }), 400
 
-        return jsonify(result), 400
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
