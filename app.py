@@ -103,6 +103,72 @@ def get_material(sH, z, v):
     except Exception as e:
         return {"error": f"Lỗi không xác định: {str(e)}"}
 
+def extract_fields_from_image(images_bytes):
+    prompt = """
+    Bạn là chuyên gia trích xuất dữ liệu từ biểu mẫu kỹ thuật. Ảnh đầu vào là một form có nhãn tiếng Việt và các ô nhập liệu giá trị số.
+
+    Dựa vào nội dung ảnh, hãy đọc và trích xuất các trường thông số kỹ thuật sau (nếu có), và trả về dưới dạng JSON chính xác với cấu trúc sau:
+
+    - F: Lực vòng băng tải (N)
+    - v: Vận tốc băng tải (m/s)
+    - D: Đường kính tang dẫn (mm)
+    - L: Thời gian phục vụ (năm)
+    - t1: Thời gian t1 (s)
+    - t2: Thời gian t2 (s)
+    - T1: Thời gian T1 (s)
+    - T2: Thời gian T2 (s)
+    - nol: Hiệu suất Ổ lăn
+    - nbr: Hiệu suất Bánh răng
+    - nx: Hiệu suất Xích
+    - uh: Hệ số Truyền động hộp
+    - u1: Hệ số Truyền cấp nhanh
+    - u2: Hệ số Truyền cấp chậm
+    - ux: Hệ số Truyền xích
+
+    ### Đầu ra yêu cầu:
+    ```json
+    {{
+        "F": {Giá trị},
+        "v": {Giá trị},
+        "D": {Giá trị},
+        "L": {Giá trị},
+        "t1": {Giá trị},
+        "t2": {Giá trị},
+        "T1": {Giá trị},
+        "T2": {Giá trị},
+        "nol": {Giá trị},
+        "nbr": {Giá trị},
+        "nx": {Giá trị},
+        "uh": {Giá trị},
+        "u1": {Giá trị},
+        "u2": {Giá trị},
+        "ux": {Giá trị}
+    }}
+    (Chỉ trả JSON, không thêm mô tả)
+    """
+
+    response = client_AI.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[
+            prompt,
+            types.Part.from_bytes(data=images_bytes, mime_type="image/png")
+        ]
+    )
+
+    response_text = response.text.strip()
+    try:
+        # Tìm và tách phần JSON chính xác nếu Gemini trả về có đánh dấu
+        json_match = re.search(r"```json\n(.*?)\n```", response_text, re.DOTALL)
+        if json_match:
+            response_text = json_match.group(1)
+
+        result = json.loads(response_text)
+        return result
+    except json.JSONDecodeError:
+        return {"error": "Lỗi khi xử lý JSON từ AI"}
+    except Exception as e:
+        return {"error": f"Lỗi không xác định: {str(e)}"}
+
 @app.route("/api-ai/find-engine", methods=["POST"])
 def findBestEngine():
     
@@ -130,6 +196,31 @@ def findMaterial():
         v = float(data["v"]) if "v" in data else None
         material = get_material(sH, z, v)
         return jsonify(material)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api-ai/extract-input-image", methods=["POST"])
+def extract_input():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part in the request"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    try:
+        image_bytes = file.read()
+        result = extract_fields_from_image(image_bytes)
+        required_fields = ["F", "v", "D", "L", "t1", "t2", "T1", "T2", "nol", "nbr", "nx", "uh", "u1", "u2", "ux"]
+        missing_fields = [field for field in required_fields if field not in result or result[field] is None]
+
+        if missing_fields:
+            return jsonify({
+                "error": f"Thiếu các trường bắt buộc: {', '.join(missing_fields)}",
+                "data": result
+            }), 400
+
+        return jsonify(result), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
