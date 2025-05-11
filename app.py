@@ -2,6 +2,7 @@ import json
 from google import genai
 from google.genai import types
 from flask import Flask, request, jsonify
+from flask_cors import CORS 
 from math import ceil
 import re
 import os
@@ -19,6 +20,7 @@ database = client["CO3109"]
 client_AI = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Danh sách động cơ từ database (Bạn có thể lấy từ MongoDB)
 
