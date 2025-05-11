@@ -53,18 +53,18 @@ def get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list):
             }}
     """
     response = client_AI.models.generate_content(
-        model="gemini-2.5-pro-exp-03-25",
+        model="gemini-2.0-flash",
         contents=[prompt])
 
-    response_text = response.text.strip()
-    response_text = re.sub(r"```json\n(.*?)\n```", r"\1", response_text, flags=re.DOTALL)
-
-    try:
-        # Parse lại JSON đúng định dạng
-        result = json.loads(response_text)
-        return result
-    except json.JSONDecodeError:
-        return {"best_motor_id": None, "reason": "Lỗi khi xử lý kết quả từ AI"}
+    def extract_json_from_response(text):
+        try:
+            # Dò tìm đoạn JSON đầu tiên
+            json_str = re.search(r"{.*}", text, flags=re.DOTALL).group(0)
+            return json.loads(json_str)
+        except:
+            return {"best_motor_id": None, "reason": "Lỗi khi xử lý kết quả từ AI"}
+    result = extract_json_from_response(response.text)
+    return result
 
 def get_material(sH, z, v):
     image_url = os.getenv("IMAGE_URL")
@@ -154,7 +154,6 @@ def extract_fields_from_image(images_bytes):
             types.Part.from_bytes(data=images_bytes, mime_type="image/png")
         ]
     )
-
     response_text = response.text.strip()
     try:
         # Tìm và tách phần JSON chính xác nếu Gemini trả về có đánh dấu
@@ -179,10 +178,13 @@ def findBestEngine():
         van_toc_quay_can_tim = int(ceil(float(data.get("van_toc_quay_can_tim", 0))))
         if cong_suat_can_tim == 0 or van_toc_quay_can_tim == 0:
             return jsonify({"error": "Thiếu thông số đầu vào"}), 400
-        dong_co_list = list(collection.find({"cong_suat": {"$gte": cong_suat_can_tim}}))
+        dong_co_list = list(collection.find({
+            "cong_suat": {"$gte": cong_suat_can_tim},
+            "van_toc_vong_quay": {"$gte": van_toc_quay_can_tim}
+        }))
         dong_co_list = json.loads(json_util.dumps(dong_co_list))
         best_motor_id = get_best_motor(cong_suat_can_tim, van_toc_quay_can_tim, dong_co_list)
-        return jsonify(best_motor_id)
+        return jsonify(best_motor_id), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -195,7 +197,7 @@ def findMaterial():
         z = float(data["z"]) if "z" in data else None
         v = float(data["v"]) if "v" in data else None
         material = get_material(sH, z, v)
-        return jsonify(material)
+        return jsonify(material), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
