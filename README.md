@@ -135,4 +135,4 @@ Trả về:
 
 ## 🧑‍💻 Tác giả
 
-Dương Thanh Tú - CO3109 - AI Backend for Engineering Automation
+Dương Thanh Tú - AI_API - AI Backend for Engineering Automation
